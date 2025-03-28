@@ -88,12 +88,11 @@ jobs:
           password: ${{ env.REGISTRY_PASS }}
 
       - name: Build and push
-        if: github.event_name == 'push'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ env.IMAGE_ID }}:${{ env.VERSION }}
+          tags: ${{ env.CONTAINER_TAGS }}
           platforms: linux/amd64,linux/arm64/v8,linux/ppc64le,linux/s390x
           provenance: false
