@@ -58,7 +58,7 @@ jobs:
 
       - name: Set registry info based on repo
         run: |
-          if [[ "${GITHUB_REPOSITORY}" == "kserve/kserve" ]]; then
+          if [[ "${GITHUB_REPOSITORY}" != "kserve/kserve" ]]; then
             echo "REGISTRY=docker.io" >> $GITHUB_ENV
             echo "IMAGE_ID=kserve/${IMAGE_NAME}" >> $GITHUB_ENV
             echo "REGISTRY_USER=${{ secrets.DOCKER_USER }}" >> $GITHUB_ENV
