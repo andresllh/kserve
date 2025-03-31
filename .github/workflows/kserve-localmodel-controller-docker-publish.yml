@@ -46,7 +46,7 @@ jobs:
     needs: test
 
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - name: Checkout source
@@ -58,30 +58,49 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: export version variable
         run: |
-          IMAGE_ID=kserve/$IMAGE_NAME
+          if [[ "${GITHUB_REPOSITORY}" == "kserve/kserve" ]]; then
+            REGISTRY="docker.io"
+            IMAGE_ID="kserve/${IMAGE_NAME}-$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)"
+            REGISTRY_USER="${{ secrets.DOCKER_USERNAME }}"
+            REGISTRY_PASS="${{ secrets.DOCKER_PASSWORD }}"
+          else
+            REGISTRY="quay.io"
+            IMAGE_ID="quay.io/${{ vars.QUAY_OWNER }}/$IMAGE_NAME"
+            REGISTRY_USER="${{ secrets.QUAY_USER }}"
+            REGISTRY_PASS="${{ secrets.QUAY_PASSWORD }}"
+          fi
 
-          # Change all uppercase to lowercase
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          # Normalize image ID
+          IMAGE_ID=$(echo "$IMAGE_ID" | tr '[A-Z]' '[a-z]')
 
-          # Strip git ref prefix from version
+          # Derive version from ref
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          [ "$VERSION" == "master" ] && VERSION="latest"
+          [[ "$VERSION" =~ ^release- ]] && VERSION=$(echo "$VERSION" | sed 's/^release-//')-latest
 
-          # Strip "v" prefix from tag name
-          # [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+          # Start tag list
+          TAGS="$IMAGE_ID:$VERSION"
 
-          # Use Docker `latest` tag convention
-          [ "$VERSION" == "master" ] && VERSION=latest
+          # Add vX.Y fallback tag if version matches vX.Y.Z
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+            TAGS="$TAGS,$IMAGE_ID:$(echo $VERSION | sed 's/\(.*\)\.[[:digit:]]\+$/\1/')"
 
-          echo VERSION=$VERSION >> $GITHUB_ENV
-          echo IMAGE_ID=$IMAGE_ID >> $GITHUB_ENV
+          # Export env vars
+          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+          echo "CONTAINER_TAGS=$TAGS" >> $GITHUB_ENV
+          echo "REGISTRY_USER=$REGISTRY_USER" >> $GITHUB_ENV
+          echo "REGISTRY_PASS=$REGISTRY_PASS" >> $GITHUB_ENV
+
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASS }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -90,6 +109,6 @@ jobs:
           context: .
           file: localmodel.Dockerfile
           push: true
-          tags: ${{ env.IMAGE_ID }}:${{ env.VERSION }}
+          tags: ${{ env.CONTAINER_TAGS }}
           # https://github.com/docker/buildx/issues/1533
           provenance: false
