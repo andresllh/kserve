@@ -20,6 +20,7 @@ import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
@@ -169,6 +170,48 @@ type WorkloadSpec struct {
 	// The controller is responsible for enabling discovery between head and worker pods.
 	// +optional
 	Worker *corev1.PodSpec `json:"worker,omitempty"`
+
+	// KVCacheOffloading configures multi-tier KV cache CPU offloading for this workload.
+	// +optional
+	KVCacheOffloading *KVCacheOffloadingSpec `json:"kvCacheOffloading,omitempty"`
+}
+
+type KVCacheOffloadingSpec struct {
+	CPU resource.Quantity `json:"cpu"`
+	// +optional
+	// +kubebuilder:validation:Enum=lru;arc
+	EvictionPolicy string `json:"evictionPolicy,omitempty"`
+	// +optional
+	Secondary []SecondaryTierSpec `json:"secondary,omitempty"`
+}
+
+type SecondaryTierSpec struct {
+	// +optional
+	FileSystem *FileSystemTierSpec `json:"fileSystem,omitempty"`
+}
+
+type FileSystemTierSpec struct {
+	// +optional
+	EmptyDir *EmptyDirTierSpec `json:"emptyDir,omitempty"`
+	// +optional
+	PVC *PVCTierSpec `json:"pvc,omitempty"`
+}
+
+type EmptyDirTierSpec struct {
+	Size resource.Quantity `json:"size"`
+}
+
+type PVCTierSpec struct {
+	// +optional
+	Spec *corev1.PersistentVolumeClaimSpec `json:"spec,omitempty"`
+	// +optional
+	Ref *PVCRefTierSpec `json:"ref,omitempty"`
+}
+
+type PVCRefTierSpec struct {
+	Name string `json:"name"`
+	// +optional
+	Path string `json:"path,omitempty"`
 }
 
 // LLMModelSpec defines the model source and its characteristics.
